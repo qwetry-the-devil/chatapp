@@ -2,155 +2,298 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Multi-Call App</title>
+<title>ChatterChat</title>
 <style>
-  body { font-family: sans-serif; padding: 20px; }
-  #incoming { display:none; margin-top:10px; border:1px solid #ccc; padding:10px; }
-  input, button { margin: 5px 0; }
+/* ===== Dark Theme & Layout ===== */
+:root {
+  --bg: #121212;
+  --sidebar-bg: #1f1f1f;
+  --chat-bg: #181818;
+  --text: #e0e0e0;
+  --muted: #888;
+  --mine-bg: #4caf50;
+  --their-bg: #2c2c2c;
+  --accent: #2196f3;
+  --border-radius: 12px;
+  --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+body { margin:0; font-family: var(--font-family); background: var(--bg); color: var(--text); }
+h2,h3{ margin:0; }
+
+.login-container {
+  width: 320px; margin: 80px auto; display:flex; flex-direction:column; gap:12px;
+  background: var(--sidebar-bg); padding:20px; border-radius: var(--border-radius);
+  box-shadow:0 0 20px rgba(0,0,0,0.5);
+}
+.login-container input { padding:10px; border-radius:8px; border:none; outline:none; background:#2c2c2c; color: var(--text); }
+.login-container button { padding:10px; border-radius:8px; border:none; background: var(--accent); color:#fff; cursor:pointer; font-weight:bold; transition: background 0.2s; }
+.login-container button:hover { background:#1976d2; }
+#status { color: var(--muted); font-size:0.85rem; min-height:18px; }
+
+.chat-container { display:flex; height:100vh; }
+.sidebar { width:250px; background:var(--sidebar-bg); padding:15px; overflow-y:auto; box-shadow:2px 0 5px rgba(0,0,0,0.5); }
+.sidebar ul { list-style:none; padding:0; margin:10px 0 0 0; }
+.sidebar li { padding:10px; border-radius:var(--border-radius); margin-bottom:6px; cursor:pointer; transition:background 0.2s; }
+.sidebar li:hover { background:#333; }
+.sidebar li.active { background:var(--accent); color:#fff; }
+
+.add-chat-btn { width:100%; padding:10px; border:none; border-radius:8px; background: var(--accent); color:#fff; font-weight:bold; cursor:pointer; margin-bottom:12px; }
+.add-chat-btn:hover { background:#1976d2; }
+
+.chat-main { flex:1; display:flex; flex-direction:column; background: var(--chat-bg); }
+.messages { flex:1; padding:20px; overflow-y:auto; display:flex; flex-direction:column; gap:10px; }
+.message { padding:10px 14px; max-width:65%; border-radius:var(--border-radius); word-wrap:break-word; position:relative; }
+.message.mine { background:var(--mine-bg); color:#fff; align-self:flex-end; border-bottom-right-radius:2px; }
+.message.their { background:var(--their-bg); color:#fff; align-self:flex-start; border-bottom-left-radius:2px; }
+.message .meta { font-size:0.75rem; color:var(--muted); margin-bottom:4px; }
+
+.input-container { display:flex; padding:12px 15px; background: var(--sidebar-bg); border-top:1px solid #333; }
+#messageInput { flex:1; padding:10px; border-radius:8px; border:none; background:#2c2c2c; color: var(--text); outline:none; font-size:1rem; }
+#sendBtn { margin-left:10px; padding:10px 16px; border-radius:8px; border:none; background: var(--accent); color:#fff; font-weight:bold; cursor:pointer; transition:background 0.2s; }
+#sendBtn:hover { background:#1976d2; }
+
+.modal { position:fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.6); display:none; align-items:center; justify-content:center; }
+.modal-content { background: var(--sidebar-bg); padding:20px; border-radius:var(--border-radius); width:300px; max-height:70%; overflow-y:auto; display:flex; flex-direction:column; }
+.modal input { padding:8px; margin-bottom:12px; border-radius:8px; border:none; background:#2c2c2c; color: var(--text); outline:none; }
+
+.user-item { padding:6px 8px; cursor:pointer; border-radius:8px; margin-bottom:4px; }
+.user-item:hover { background:#333; }
+.user-item.selected { background: var(--accent); color:#fff; }
+
+@media(max-width:768px) {
+  .chat-container{ flex-direction:column; }
+  .sidebar{ width:100%; height:auto; box-shadow:none; }
+  .messages{ padding:10px; }
+}
 </style>
 </head>
 <body>
 
-<h1>Call App</h1>
-<p>Your session number: <span id="myNumber"></span></p>
-
-<input type="text" id="targetNumber" placeholder="Enter target number">
-<button id="callBtn">Call</button>
-
-<div id="incoming">
-  <p>Incoming call from <span id="callerNumber"></span></p>
-  <button id="acceptBtn">Accept</button>
-  <button id="declineBtn">Decline</button>
+<div id="loginDiv" class="login-container">
+  <h2>Login / Signup</h2>
+  <input type="text" id="username" placeholder="Username">
+  <input type="password" id="password" placeholder="Password">
+  <button id="loginBtn">Login</button>
+  <button id="signupBtn">Sign Up</button>
+  <p id="status"></p>
 </div>
 
-<audio id="localAudio" autoplay muted></audio>
-<audio id="remoteAudio" autoplay></audio>
+<div id="chatDiv" class="chat-container" style="display:none;">
+  <div class="sidebar">
+    <button class="add-chat-btn" id="newChatBtn">+ New Chat</button>
+    <h3>Chats</h3>
+    <ul id="chatList"></ul>
+  </div>
+  <div class="chat-main">
+    <div id="messages" class="messages"></div>
+    <div class="input-container">
+      <input type="text" id="messageInput" placeholder="Type a message...">
+      <button id="sendBtn">Send</button>
+    </div>
+  </div>
+</div>
 
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
-import { getDatabase, ref, set, push, remove, onChildAdded, get } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js";
+<!-- Modal for New Chat -->
+<div class="modal" id="newChatModal">
+  <div class="modal-content">
+    <h3>Select Users</h3>
+    <input type="text" id="userSearch" placeholder="Search users...">
+    <div id="userList"></div>
+    <button id="createChatBtn" style="margin-top:12px;">Create Chat</button>
+  </div>
+</div>
 
-// ==== Firebase config ====
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+
+<script>
+// ===== Firebase Config =====
 const firebaseConfig = {
-  apiKey: "AIzaSyDQiRqtuItW0wBMBUnQMoWusHmNlYmmaEo",
-  authDomain: "ccaalllleerr.firebaseapp.com",
-  databaseURL: "https://ccaalllleerr-default-rtdb.firebaseio.com",
-  projectId: "ccaalllleerr",
-  storageBucket: "ccaalllleerr.appspot.com",
-  messagingSenderId: "690586386986",
-  appId: "1:690586386986:web:3871ce4166d743035cf953"
+  apiKey: "AIzaSyAU1SHuBd24zNgP11D6aOPV3w0YFxz8bso",
+  authDomain: "cchhatteerr.firebaseapp.com",
+  projectId: "cchhatteerr",
+  storageBucket: "cchhatteerr.firebasestorage.app",
+  messagingSenderId: "462333840338",
+  appId: "1:462333840338:web:81b2a196992783a7ea160b",
+  measurementId: "G-H9M070PFZB"
 };
 
-const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
 
-// ==== Session number ====
-const myNumber = Math.floor(1000 + Math.random()*9000).toString();
-document.getElementById("myNumber").innerText = myNumber;
+// ===== DOM =====
+const loginDiv = document.getElementById("loginDiv");
+const chatDiv = document.getElementById("chatDiv");
+const usernameInput = document.getElementById("username");
+const passwordInput = document.getElementById("password");
+const loginBtn = document.getElementById("loginBtn");
+const signupBtn = document.getElementById("signupBtn");
+const statusEl = document.getElementById("status");
+const messagesEl = document.getElementById("messages");
+const messageInput = document.getElementById("messageInput");
+const sendBtn = document.getElementById("sendBtn");
+const chatListEl = document.getElementById("chatList");
+const newChatBtn = document.getElementById("newChatBtn");
+const newChatModal = document.getElementById("newChatModal");
+const userListEl = document.getElementById("userList");
+const userSearch = document.getElementById("userSearch");
+const createChatBtn = document.getElementById("createChatBtn");
 
-const myCallsRef = ref(db, "calls/" + myNumber);
+let currentUser;
+let currentChatId = "global";
+let allUsers = [];
+let unsubscribeMsg = null;
 
-let localStream;
-let pcs = {}; // store multiple peer connections
+// ===== Helpers =====
+function normalizeUsername(u){ return u.trim().toLowerCase().replace(/\s+/g,'_'); }
+function formatTime(d){ const h=d.getHours().toString().padStart(2,'0'); const m=d.getMinutes().toString().padStart(2,'0'); const s=d.getSeconds().toString().padStart(2,'0'); return `${h}:${m}:${s}`; }
 
-// ==== Helper to show incoming call popup ====
-function showIncoming(callId, from){
-  document.getElementById("incoming").style.display = "block";
-  document.getElementById("callerNumber").innerText = from;
-  document.getElementById("acceptBtn").dataset.callId = callId;
-  document.getElementById("declineBtn").dataset.callId = callId;
+// ===== Auth =====
+signupBtn.addEventListener("click", async ()=>{
+  const username = usernameInput.value.trim();
+  const password = passwordInput.value;
+  if(!username||!password){ statusEl.textContent="Enter username & password"; return; }
+  const uname = normalizeUsername(username);
+  const email = `${uname}@chat.local`;
+
+  try{
+    const userCred = await auth.createUserWithEmailAndPassword(email,password);
+    currentUser = userCred.user;
+    await db.collection("users").doc(currentUser.uid).set({username:username});
+    initChat();
+  } catch(err){ statusEl.textContent=err.message; }
+});
+
+loginBtn.addEventListener("click", async ()=>{
+  const username = usernameInput.value.trim();
+  const password = passwordInput.value;
+  if(!username||!password){ statusEl.textContent="Enter username & password"; return; }
+  const uname = normalizeUsername(username);
+  const email = `${uname}@chat.local`;
+
+  try{
+    const userCred = await auth.signInWithEmailAndPassword(email,password);
+    currentUser = userCred.user;
+    initChat();
+  } catch(err){ statusEl.textContent="Invalid credentials"; }
+});
+
+// ===== Chat =====
+function initChat(){
+  loginDiv.style.display="none";
+  chatDiv.style.display="flex";
+  loadUsers();
+  listenChats();
+  listenMessages(currentChatId);
 }
 
-// ==== Load existing calls on startup ====
-get(myCallsRef).then(snapshot=>{
-  const calls = snapshot.val();
-  if(calls){
-    Object.entries(calls).forEach(([callId, call])=>{
-      if(call.status !== "answered" && call.type === "offer"){
-        showIncoming(callId, call.from);
+function addMessageToDOM(msgData){
+  const div = document.createElement("div");
+  div.classList.add("message");
+  div.classList.add(msgData.senderId===currentUser.uid?"mine":"their");
+  div.innerHTML=`<div class="meta">${msgData.username} - ${msgData.time}</div>${msgData.text}`;
+  messagesEl.appendChild(div);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+sendBtn.addEventListener("click", async ()=>{
+  const text = messageInput.value.trim();
+  if(!text) return;
+  const now = formatTime(new Date());
+  await db.collection("chats").doc(currentChatId).collection("messages").add({
+    text, username:currentUser.displayName||usernameInput.value, senderId:currentUser.uid, time:now
+  });
+  messageInput.value="";
+});
+
+messageInput.addEventListener("keypress", e=>{ if(e.key==="Enter") sendBtn.click(); });
+
+// ===== Load Users =====
+async function loadUsers(){
+  const snapshot = await db.collection("users").get();
+  allUsers = snapshot.docs.map(doc=>({id:doc.id, username:doc.data().username}));
+}
+
+// ===== Chat List =====
+function listenChats(){
+  db.collection("chats").onSnapshot(snapshot=>{
+    chatListEl.innerHTML = "";
+
+    // Global Chat
+    const globalLi = document.createElement("li");
+    globalLi.dataset.id = "global";
+    globalLi.textContent = "🌍 Global Chat";
+    if(currentChatId==="global") globalLi.classList.add("active");
+    globalLi.addEventListener("click", ()=> switchChat("global"));
+    chatListEl.appendChild(globalLi);
+
+    snapshot.docs.forEach(doc=>{
+      const data = doc.data();
+      if(data.members.includes(currentUser.uid)){
+        const li = document.createElement("li");
+        li.textContent = data.name;
+        li.dataset.id = doc.id;
+        if(doc.id === currentChatId) li.classList.add("active");
+        li.addEventListener("click", ()=> switchChat(doc.id));
+        chatListEl.appendChild(li);
       }
     });
-  }
-});
-
-// ==== Listen for new calls ====
-onChildAdded(myCallsRef, snapshot=>{
-  const callId = snapshot.key;
-  const call = snapshot.val();
-  if(call.status !== "answered" && call.type === "offer"){
-    showIncoming(callId, call.from);
-  }
-});
-
-// ==== Accept call ====
-document.getElementById("acceptBtn").onclick = async (e)=>{
-  const callId = e.target.dataset.callId;
-  const callRef = ref(db, `calls/${myNumber}/${callId}`);
-  document.getElementById("incoming").style.display = "none";
-
-  localStream = await navigator.mediaDevices.getUserMedia({audio:true});
-  document.getElementById("localAudio").srcObject = localStream;
-
-  const callData = (await get(callRef)).val();
-  const pc = createPeerConnection(callData.from, callId);
-  pcs[callId] = pc;
-
-  await pc.setRemoteDescription(callData.offer);
-
-  const answer = await pc.createAnswer();
-  await pc.setLocalDescription(answer);
-
-  await set(callRef, {...callData, status:"answered", answer: pc.localDescription});
-};
-
-// ==== Decline call ====
-document.getElementById("declineBtn").onclick = (e)=>{
-  const callId = e.target.dataset.callId;
-  const callRef = ref(db, `calls/${myNumber}/${callId}`);
-  remove(callRef);
-  document.getElementById("incoming").style.display = "none";
-};
-
-// ==== Make call ====
-document.getElementById("callBtn").onclick = async ()=>{
-  const target = document.getElementById("targetNumber").value;
-  if(!target) return alert("Enter a target number");
-
-  localStream = await navigator.mediaDevices.getUserMedia({audio:true});
-  document.getElementById("localAudio").srcObject = localStream;
-
-  const callRef = push(ref(db, "calls/" + target));
-  const callId = callRef.key;
-
-  const pc = createPeerConnection(target, callId);
-  pcs[callId] = pc;
-
-  const offer = await pc.createOffer();
-  await pc.setLocalDescription(offer);
-
-  await set(callRef, {type:"offer", from: myNumber, offer, status:"pending"});
-};
-
-// ==== Create peer connection ====
-function createPeerConnection(target, callId){
-  const pc = new RTCPeerConnection();
-
-  if(localStream){
-    localStream.getTracks().forEach(track=>pc.addTrack(track, localStream));
-  }
-
-  pc.ontrack = e=>{
-    document.getElementById("remoteAudio").srcObject = e.streams[0];
-  };
-
-  pc.onicecandidate = event=>{
-    if(event.candidate){
-      set(ref(db, `calls/${target}/${callId}/candidate`), {candidate: event.candidate});
-    }
-  };
-
-  return pc;
+  });
 }
+
+function switchChat(chatId){
+  currentChatId = chatId;
+  messagesEl.innerHTML="";
+  document.querySelectorAll("#chatList li").forEach(li=>li.classList.remove("active"));
+  document.querySelector(`#chatList li[data-id="${chatId}"]`).classList.add("active");
+  listenMessages(chatId);
+}
+
+// ===== Messages Listener =====
+function listenMessages(chatId){
+  if(unsubscribeMsg) unsubscribeMsg();
+  unsubscribeMsg = db.collection("chats").doc(chatId).collection("messages").orderBy("time").onSnapshot(snapshot=>{
+    messagesEl.innerHTML="";
+    snapshot.docs.forEach(doc=>{
+      addMessageToDOM(doc.data());
+    });
+  });
+}
+
+// ===== New Chat Modal =====
+newChatBtn.addEventListener("click", ()=>{
+  newChatModal.style.display="flex";
+  renderUserList(allUsers);
+});
+
+userSearch.addEventListener("input", ()=>{ 
+  renderUserList(allUsers.filter(u=>u.username.toLowerCase().includes(userSearch.value.toLowerCase()))); 
+});
+
+function renderUserList(users){
+  userListEl.innerHTML="";
+  users.forEach(u=>{
+    const div = document.createElement("div");
+    div.textContent = u.username;
+    div.classList.add("user-item");
+    div.dataset.id = u.id;
+    div.addEventListener("click", ()=> div.classList.toggle("selected"));
+    userListEl.appendChild(div);
+  });
+}
+
+createChatBtn.addEventListener("click", async ()=>{
+  const selected = [...document.querySelectorAll(".user-item.selected")].map(el=>el.dataset.id);
+  if(selected.length===0){ alert("Select at least one user"); return; }
+  const chatName = prompt("Enter chat name:") || "Group Chat";
+  selected.push(currentUser.uid); // include self
+  await db.collection("chats").add({name:chatName,members:selected});
+  newChatModal.style.display="none";
+});
 </script>
 
 </body>
