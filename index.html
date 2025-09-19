@@ -83,9 +83,7 @@ h2,h3{ margin:0; }
   <div class="sidebar">
     <button class="add-chat-btn" id="newChatBtn">+ New Chat</button>
     <h3>Chats</h3>
-    <ul id="chatList">
-      <li data-id="global" class="active">🌍 Global Chat</li>
-    </ul>
+    <ul id="chatList"></ul>
   </div>
   <div class="chat-main">
     <div id="messages" class="messages"></div>
@@ -148,6 +146,7 @@ const createChatBtn = document.getElementById("createChatBtn");
 let currentUser;
 let currentChatId = "global";
 let allUsers = [];
+let unsubscribeMsg = null;
 
 // ===== Helpers =====
 function normalizeUsername(u){ return u.trim().toLowerCase().replace(/\s+/g,'_'); }
@@ -206,7 +205,7 @@ sendBtn.addEventListener("click", async ()=>{
   if(!text) return;
   const now = formatTime(new Date());
   await db.collection("chats").doc(currentChatId).collection("messages").add({
-    text, username:currentUser.displayName||currentUser.email, senderId:currentUser.uid, time:now
+    text, username:currentUser.displayName||usernameInput.value, senderId:currentUser.uid, time:now
   });
   messageInput.value="";
 });
@@ -222,15 +221,24 @@ async function loadUsers(){
 // ===== Chat List =====
 function listenChats(){
   db.collection("chats").onSnapshot(snapshot=>{
-    chatListEl.innerHTML=`<li data-id="global" class="active">🌍 Global Chat</li>`;
+    chatListEl.innerHTML = "";
+
+    // Global Chat
+    const globalLi = document.createElement("li");
+    globalLi.dataset.id = "global";
+    globalLi.textContent = "🌍 Global Chat";
+    if(currentChatId==="global") globalLi.classList.add("active");
+    globalLi.addEventListener("click", ()=> switchChat("global"));
+    chatListEl.appendChild(globalLi);
+
     snapshot.docs.forEach(doc=>{
       const data = doc.data();
       if(data.members.includes(currentUser.uid)){
         const li = document.createElement("li");
         li.textContent = data.name;
         li.dataset.id = doc.id;
-        if(doc.id===currentChatId) li.classList.add("active");
-        li.addEventListener("click", ()=>{ switchChat(doc.id); });
+        if(doc.id === currentChatId) li.classList.add("active");
+        li.addEventListener("click", ()=> switchChat(doc.id));
         chatListEl.appendChild(li);
       }
     });
@@ -246,7 +254,6 @@ function switchChat(chatId){
 }
 
 // ===== Messages Listener =====
-let unsubscribeMsg = null;
 function listenMessages(chatId){
   if(unsubscribeMsg) unsubscribeMsg();
   unsubscribeMsg = db.collection("chats").doc(chatId).collection("messages").orderBy("time").onSnapshot(snapshot=>{
@@ -263,7 +270,9 @@ newChatBtn.addEventListener("click", ()=>{
   renderUserList(allUsers);
 });
 
-userSearch.addEventListener("input", ()=>{ renderUserList(allUsers.filter(u=>u.username.toLowerCase().includes(userSearch.value.toLowerCase()))); });
+userSearch.addEventListener("input", ()=>{ 
+  renderUserList(allUsers.filter(u=>u.username.toLowerCase().includes(userSearch.value.toLowerCase()))); 
+});
 
 function renderUserList(users){
   userListEl.innerHTML="";
@@ -282,9 +291,10 @@ createChatBtn.addEventListener("click", async ()=>{
   if(selected.length===0){ alert("Select at least one user"); return; }
   const chatName = prompt("Enter chat name:") || "Group Chat";
   selected.push(currentUser.uid); // include self
-  const docRef = await db.collection("chats").add({name:chatName,members:selected});
+  await db.collection("chats").add({name:chatName,members:selected});
   newChatModal.style.display="none";
 });
 </script>
+
 </body>
 </html>
