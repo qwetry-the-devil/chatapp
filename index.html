@@ -3,8 +3,87 @@
 <head>
 <meta charset="UTF-8">
 <title>ChatterChat</title>
-<link rel="stylesheet" href="styles.css">
+<style>
+/* === Dark Theme & Layout === */
+:root {
+  --bg: #121212;
+  --sidebar-bg: #1f1f1f;
+  --chat-bg: #181818;
+  --text: #e0e0e0;
+  --muted: #888;
+  --mine-bg: #4caf50;
+  --their-bg: #2c2c2c;
+  --accent: #2196f3;
+  --border-radius: 12px;
+  --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
 
+body { margin:0; font-family: var(--font-family); background: var(--bg); color: var(--text); }
+
+h2,h3{ margin:0; }
+
+.login-container {
+  width: 320px;
+  margin: 80px auto;
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+  background: var(--sidebar-bg);
+  padding:20px;
+  border-radius: var(--border-radius);
+  box-shadow:0 0 20px rgba(0,0,0,0.5);
+}
+
+.login-container input {
+  padding:10px;
+  border-radius:8px;
+  border:none;
+  outline:none;
+  background:#2c2c2c;
+  color: var(--text);
+}
+
+.login-container button {
+  padding:10px;
+  border-radius:8px;
+  border:none;
+  background: var(--accent);
+  color:#fff;
+  cursor:pointer;
+  font-weight:bold;
+  transition: background 0.2s;
+}
+
+.login-container button:hover { background:#1976d2; }
+#status { color: var(--muted); font-size:0.85rem; min-height:18px; }
+
+.chat-container { display:flex; height:100vh; }
+
+.sidebar { width:220px; background:var(--sidebar-bg); padding:15px; overflow-y:auto; box-shadow:2px 0 5px rgba(0,0,0,0.5); }
+.sidebar ul { list-style:none; padding:0; margin:10px 0 0 0; }
+.sidebar li { padding:10px; border-radius:var(--border-radius); margin-bottom:6px; cursor:pointer; transition:background 0.2s; }
+.sidebar li:hover { background:#333; }
+.sidebar li.active { background:var(--accent); color:#fff; }
+
+.chat-main { flex:1; display:flex; flex-direction:column; background: var(--chat-bg); }
+.messages { flex:1; padding:20px; overflow-y:auto; display:flex; flex-direction:column; gap:10px; }
+
+.message { padding:10px 14px; max-width:65%; border-radius:var(--border-radius); word-wrap:break-word; position:relative; }
+.message.mine { background:var(--mine-bg); color:#fff; align-self:flex-end; border-bottom-right-radius:2px; }
+.message.their { background:var(--their-bg); color:#fff; align-self:flex-start; border-bottom-left-radius:2px; }
+.message .meta { font-size:0.75rem; color:var(--muted); margin-bottom:4px; }
+
+.input-container { display:flex; padding:12px 15px; background: var(--sidebar-bg); border-top:1px solid #333; }
+#messageInput { flex:1; padding:10px; border-radius:8px; border:none; background:#2c2c2c; color: var(--text); outline:none; font-size:1rem; }
+#sendBtn { margin-left:10px; padding:10px 16px; border-radius:8px; border:none; background: var(--accent); color:#fff; font-weight:bold; cursor:pointer; transition:background 0.2s; }
+#sendBtn:hover { background:#1976d2; }
+
+@media(max-width:768px) {
+  .chat-container{ flex-direction:column; }
+  .sidebar{ width:100%; height:auto; box-shadow:none; }
+  .messages{ padding:10px; }
+}
+</style>
 </head>
 <body>
 
@@ -20,7 +99,9 @@
 <div id="chatDiv" class="chat-container" style="display:none;">
   <div class="sidebar">
     <h3>Chats</h3>
-    <ul id="chatList"></ul>
+    <ul id="chatList">
+      <li data-id="global" class="active">🌍 Global Chat</li>
+    </ul>
   </div>
   <div class="chat-main">
     <div id="messages" class="messages"></div>
@@ -31,12 +112,116 @@
   </div>
 </div>
 
-<!-- Firebase -->
-<script src="https://www.gstatic.com/firebasejs/11.22.1/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/11.22.1/firebase-auth.js"></script>
-<script src="https://www.gstatic.com/firebasejs/11.22.1/firebase-firestore.js"></script>
+<!-- Firebase (compat scripts for GitHub Pages) -->
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
 
-<!-- App JS -->
-<script src="app.js"></script>
+<script>
+// ===== Firebase Config =====
+const firebaseConfig = {
+  apiKey: "AIzaSyAU1SHuBd24zNgP11D6aOPV3w0YFxz8bso",
+  authDomain: "cchhatteerr.firebaseapp.com",
+  projectId: "cchhatteerr",
+  storageBucket: "cchhatteerr.firebasestorage.app",
+  messagingSenderId: "462333840338",
+  appId: "1:462333840338:web:81b2a196992783a7ea160b",
+  measurementId: "G-H9M070PFZB"
+};
+
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+// ===== DOM Elements =====
+const loginDiv = document.getElementById("loginDiv");
+const chatDiv = document.getElementById("chatDiv");
+const usernameInput = document.getElementById("username");
+const passwordInput = document.getElementById("password");
+const loginBtn = document.getElementById("loginBtn");
+const signupBtn = document.getElementById("signupBtn");
+const statusEl = document.getElementById("status");
+const messagesEl = document.getElementById("messages");
+const messageInput = document.getElementById("messageInput");
+const sendBtn = document.getElementById("sendBtn");
+
+let currentUser;
+const currentChatId = "global";
+
+// ===== Helpers =====
+function normalizeUsername(u){ return u.trim().toLowerCase().replace(/\s+/g,'_'); }
+function formatTime(d){
+  const h=d.getHours().toString().padStart(2,'0');
+  const m=d.getMinutes().toString().padStart(2,'0');
+  const s=d.getSeconds().toString().padStart(2,'0');
+  return `${h}:${m}:${s}`;
+}
+
+// ===== Auth =====
+signupBtn.addEventListener("click", async ()=>{
+  const username = usernameInput.value.trim();
+  const password = passwordInput.value;
+  if(!username||!password){ statusEl.textContent="Enter username & password"; return; }
+  const uname = normalizeUsername(username);
+  const email = `${uname}@chat.local`;
+
+  try{
+    const userCred = await auth.createUserWithEmailAndPassword(email,password);
+    currentUser = userCred.user;
+    await db.collection("users").doc(currentUser.uid).set({
+      username, usernameLower:uname, createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    loginDiv.style.display="none"; chatDiv.style.display="flex";
+    subscribeMessages();
+  }catch(err){ statusEl.textContent=err.message; }
+});
+
+loginBtn.addEventListener("click", async ()=>{
+  const username = usernameInput.value.trim();
+  const password = passwordInput.value;
+  if(!username||!password){ statusEl.textContent="Enter username & password"; return; }
+  const uname = normalizeUsername(username);
+  const email = `${uname}@chat.local`;
+
+  try{
+    const userCred = await auth.signInWithEmailAndPassword(email,password);
+    currentUser = userCred.user;
+    loginDiv.style.display="none"; chatDiv.style.display="flex";
+    subscribeMessages();
+  }catch(err){ statusEl.textContent=err.message; }
+});
+
+// ===== Chat =====
+sendBtn.addEventListener("click", sendMessage);
+messageInput.addEventListener("keypress", e=>{ if(e.key==="Enter") sendMessage(); });
+
+async function sendMessage(){
+  const text = messageInput.value.trim(); if(!text) return;
+  await db.collection("chats").doc(currentChatId).collection("messages").add({
+    text,
+    senderId: currentUser.uid,
+    username: usernameInput.value.trim(),
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
+  messageInput.value="";
+}
+
+function subscribeMessages(){
+  db.collection("chats").doc(currentChatId).collection("messages").orderBy("createdAt")
+    .onSnapshot(snapshot=>{
+      messagesEl.innerHTML="";
+      snapshot.forEach(doc=>{
+        const m = doc.data();
+        const mine = m.senderId===currentUser.uid;
+        const div = document.createElement("div");
+        div.className = "message "+(mine?"mine":"their");
+        const time = m.createdAt ? formatTime(m.createdAt.toDate()) : "";
+        div.innerHTML = `<div class="meta"><strong>${m.username}</strong> • <span>${time}</span></div><div class="body">${m.text}</div>`;
+        messagesEl.appendChild(div);
+      });
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    });
+}
+</script>
 </body>
 </html>
